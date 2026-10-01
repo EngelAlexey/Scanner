@@ -64,3 +64,55 @@ Diferencias esperadas:
 ### Pendiente
 
 La detección de `http2-only` no está hecha: un servidor que solo habla HTTP/2 da hoy `connection_failed`. Los límites de Vercel Hobby y las horas de cómputo de Neon se anotan al activar el análisis en producción.
+
+## Fase 3: revisiones completas (2026-10-01)
+
+El revisor se ejecutó con `pnpm scan <dominio>` en Node 24.19.0, desde Costa Rica. Un análisis tardó entre 3 y 5 segundos en sitios grandes y hasta 15 en badssl.com.
+
+### Certificados y TLS con badssl.com
+
+| Sitio | Caso | Revisor |
+|---|---|---|
+| expired.badssl.com | Certificado vencido | `cert-expired` |
+| wrong.host.badssl.com | Certificado de otro dominio | `cert-name-mismatch` |
+| self-signed.badssl.com | Certificado autofirmado | `cert-untrusted` |
+| untrusted-root.badssl.com | Raíz que no es de confianza | `cert-untrusted` |
+| incomplete-chain.badssl.com | Falta el certificado intermedio | `cert-chain-incomplete` |
+| sha256.badssl.com | Certificado válido | Sin hallazgos de certificado |
+| mixed-script.badssl.com | Script cargado por HTTP | `mixed-content` |
+| hsts.badssl.com | HSTS de 6 meses | `hsts-short` |
+
+Coinciden las 8 filas. Todos los servidores de badssl.com aceptan TLS 1.0 y 1.1 y no negocian TLS 1.3, así que todos dan además `tls-legacy` y `tls13-missing`.
+
+badssl.com corta conexiones cuando una misma IP abre varias a la vez. En la primera versión, el revisor abría hasta cinco y daba `https-unavailable` en sitios que sí respondían. Ahora la sonda TLS espera a la respuesta HTTPS, prueba TLS 1.0 y 1.1 una tras otra y reintenta una vez tras un corte. Si la sonda falla pero la página llegó por HTTPS, la conexión cuenta como disponible y el certificado queda sin revisar.
+
+### Comparación con Mozilla Observatory
+
+| Sitio | Comprobación | Revisor | Observatory |
+|---|---|---|---|
+| github.com | Redirección a HTTPS | Aprueba | `redirection-all-redirects-preloaded` |
+| github.com | Cookies | `cookie-no-httponly` (informativa) | `cookies-secure-with-httponly-sessions-and-samesite` |
+| github.com | SRI | Aprueba | `sri-not-implemented-but-external-scripts-loaded-securely` |
+| www.google.com | Redirección a HTTPS | `http-no-redirect` | `redirection-to-https` |
+| www.google.com | HSTS | `hsts-missing` | `hsts-implemented-max-age-at-least-six-months` |
+| www.google.com | Cookies | `cookie-no-secure`, `cookie-no-samesite` | `cookies-without-secure-flag-but-protected-by-hsts` |
+| www.google.com | CSP | `csp-missing`, observación `csp-report-only` | `csp-not-implemented-but-reporting-enabled` |
+| www.google.com | `nosniff` | `nosniff-missing` | `x-content-type-options-not-implemented` |
+| wikipedia.org | Cookies | `cookie-no-samesite` | `cookies-secure-with-httponly-sessions` |
+| wikipedia.org | Referrer-Policy | `referrer-policy-missing` | `referrer-policy-not-implemented`, sin penalización |
+
+Diferencias y su causa:
+
+- **El User-Agent cambia la respuesta de Google.** Con el User-Agent del revisor, o con el de `curl`, `www.google.com` no redirige a HTTPS ni envía HSTS. Con el de un navegador, redirige con 302 y envía `max-age=31536000`. Observatory usa el User-Agent de un navegador. Un User-Agent de navegador que termina en `AlexHerreraScanner/1.0` recibe también la respuesta de navegador. Cambiarlo es una decisión del autor, porque el plan fija el User-Agent actual.
+- **Cookies sin SameSite.** El revisor exige SameSite en todas las cookies; Observatory solo lo premia.
+- **Cookies sin HttpOnly que no son de sesión.** El revisor las marca como informativas, sin restar puntos.
+- **Referrer-Policy ausente.** Observatory no la penaliza, porque los navegadores aplican `strict-origin-when-cross-origin` por defecto. La calibración de la fase 4 decide si baja a informativa.
+- **SRI.** La diferencia ya descrita en la fase 1: el revisor solo exige `integrity` a las CDN con versión fija.
+
+### Precarga HSTS
+
+`hstspreload.org` da como precargados 30 dominios de nivel superior, entre ellos `.app`, `.dev`, `.page`, `.bank` e `.insurance`, consultados el 2026-10-01. Un sitio bajo esos dominios aprueba HSTS y la redirección de HTTP con la observación `hsts-preloaded`, porque los navegadores solo lo abren por HTTPS. `github.io` no está precargado, así que octocat.github.io da `hsts-missing` y `http-no-redirect`.
+
+### Puerto 80 con error
+
+`http://twitter.com/` responde 520 desde Cloudflare. Una respuesta 4xx o 5xx por HTTP no cuenta como contenido servido sin cifrar, así que la comprobación queda sin resultado.
