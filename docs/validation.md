@@ -143,12 +143,13 @@ Coinciden las 15 filas.
 
 ## Fase 4: calibración de la nota (2026-10-01)
 
-`pnpm calibrate scripts/sites.txt` analizó 28 sitios: grandes servicios, sitios técnicos, medios, gobiernos y sitios de Costa Rica. La primera tabla de penalizaciones (versión 1.0.0) es la del plan de producto: crítica 40, alta 15, media 7, baja 3 e informativa 0, con la nota limitada a D si hay un hallazgo crítico.
+`pnpm calibrate scripts/sites.txt` analizó 28 sitios: grandes servicios, sitios técnicos, medios, gobiernos y sitios de Costa Rica. La versión 1.0.0 usa la tabla del plan de producto: crítica 40, alta 15, media 7, baja 3 e informativa 0. Un hallazgo crítico limita la nota a D.
 
-Con la versión 1.0.0, Wikipedia, el New York Times y Cloudflare bajaban a D, y Apple y Microsoft a C, por dos reglas que no tenían un riesgo equivalente:
+Con esa versión, Wikipedia, el New York Times y Cloudflare bajaban a D, y Apple y Microsoft a C. Dos reglas restaban más de lo que justificaba su riesgo.
 
-- **Referrer-Policy ausente.** Los navegadores aplican `strict-origin-when-cross-origin` cuando el sitio no envía la cabecera, y Observatory no la penaliza. En la versión 1.1.0, la ausencia aprueba. Un valor que filtra la dirección completa (`unsafe-url` o `no-referrer-when-downgrade`) sigue dando `referrer-policy-missing`.
-- **SameSite en cookies que no son de sesión.** Sin credenciales no hay ataque de solicitud cruzada. En la versión 1.1.0, `cookie-no-samesite` solo se aplica a las cookies de sesión.
+**Referrer-Policy ausente.** Los navegadores aplican `strict-origin-when-cross-origin` cuando el sitio no envía la cabecera, y Observatory no la penaliza. En la versión 1.1.0, la ausencia aprueba. Un valor que filtra la dirección completa (`unsafe-url` o `no-referrer-when-downgrade`) sigue dando `referrer-policy-missing`.
+
+**SameSite en cookies que no son de sesión.** Sin credenciales no hay ataque de solicitud cruzada. En la versión 1.1.0, `cookie-no-samesite` solo se aplica a las cookies de sesión.
 
 | Sitio | 1.0.0 | 1.1.0 |
 |---|---|---|
