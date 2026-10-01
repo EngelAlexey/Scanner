@@ -103,7 +103,7 @@ badssl.com corta conexiones cuando una misma IP abre varias a la vez. En la prim
 
 Diferencias y su causa:
 
-- **El User-Agent cambia la respuesta de Google.** Con el User-Agent del revisor, o con el de `curl`, `www.google.com` no redirige a HTTPS ni envía HSTS. Con el de un navegador, redirige con 302 y envía `max-age=31536000`. Observatory usa el User-Agent de un navegador. Un User-Agent de navegador que termina en `AlexHerreraScanner/1.0` recibe también la respuesta de navegador. Cambiarlo es una decisión del autor, porque el plan fija el User-Agent actual.
+- **El User-Agent cambia la respuesta de Google.** Con el User-Agent anterior del revisor, o con el de `curl`, `www.google.com` no redirigía a HTTPS ni enviaba HSTS. Con el de un navegador, redirige con 302 y envía `max-age=31536000`, como ve Observatory. El 2026-10-01 el autor decidió usar un User-Agent de navegador que termina en `AlexHerreraScanner/1.0` y la URL de la página «acerca». Con él, `www.google.com` aprueba la redirección y HSTS.
 - **Cookies sin SameSite.** El revisor exige SameSite en todas las cookies; Observatory solo lo premia.
 - **Cookies sin HttpOnly que no son de sesión.** El revisor las marca como informativas, sin restar puntos.
 - **Referrer-Policy ausente.** Observatory no la penaliza, porque los navegadores aplican `strict-origin-when-cross-origin` por defecto. La calibración de la fase 4 decide si baja a informativa.
