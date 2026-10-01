@@ -116,3 +116,27 @@ Diferencias y su causa:
 ### Puerto 80 con error
 
 `http://twitter.com/` responde 520 desde Cloudflare. Una respuesta 4xx o 5xx por HTTP no cuenta como contenido servido sin cifrar, así que la comprobación queda sin resultado.
+
+### Correo y DNS frente a los registros publicados
+
+La referencia son los registros TXT y CAA que devuelve 1.1.1.1, consultados el 2026-10-01.
+
+| Dominio | Registro publicado | Revisor |
+|---|---|---|
+| github.com | SPF con `ip4` e `include` de Outlook, Google y Zendesk | Aprueba `spf` |
+| github.com | `v=DMARC1; p=quarantine; sp=reject; pct=100` | Aprueba `dmarc` |
+| github.com | 7 registros CAA | Aprueba `caa` |
+| google.com | `v=spf1 include:_spf.google.com ~all` | Aprueba `spf` |
+| google.com | `v=DMARC1; p=reject` | Aprueba `dmarc` |
+| google.com | 1 registro CAA, encontrado desde `www.google.com` | Aprueba `caa` |
+| wikipedia.org | `v=spf1 include:_cidrs.wikimedia.org ~all` | Aprueba `spf` |
+| wikipedia.org | `v=DMARC1; p=reject` | Aprueba `dmarc` |
+| wikipedia.org | 3 registros CAA | Aprueba `caa` |
+| alexherrera.dev | Sin registro SPF | `spf-missing` |
+| alexherrera.dev | `_dmarc.alexherrera.dev` no existe | `dmarc-missing` |
+| alexherrera.dev | Sin CAA en el dominio | `caa-missing` |
+| twitter.com | SPF con `ip4` e `include` de Google | Aprueba `spf` |
+| twitter.com | `v=DMARC1; p=reject` | Aprueba `dmarc` |
+| twitter.com | Sin CAA en el dominio | `caa-missing` |
+
+Coinciden las 15 filas.
