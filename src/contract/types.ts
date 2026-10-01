@@ -17,4 +17,8 @@ export type CheckResult = {
 	readonly notes: readonly Note[];
 };
 
+export type SectionResult = CheckResult & {
+	readonly status: SectionStatus;
+};
+
 export type HeaderMap = Readonly<Record<string, readonly string[]>>;

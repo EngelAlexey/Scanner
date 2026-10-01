@@ -57,6 +57,10 @@ for (const name of SHOWN_HEADERS) {
 	console.log(`  ${values ? '+' : '-'} ${name}${values ? `: ${values.join(' | ')}` : ''}`);
 }
 
+if (scan.blockedBy !== undefined) {
+	console.log(`\nBlocked by ${scan.blockedBy}: no section was scored`);
+}
+
 console.log('\nFindings');
 if (findings.length === 0) {
 	console.log('  none');

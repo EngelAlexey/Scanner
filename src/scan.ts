@@ -1,7 +1,8 @@
 import { checkHsts } from './checks/connection.ts';
 import { capEvidence } from './checks/evidence.ts';
 import { checkHeaders } from './checks/headers.ts';
-import type { CheckResult, Evidence } from './contract/types.ts';
+import type { Evidence, SectionResult } from './contract/types.ts';
+import { detectBlock, type BlockProvider } from './net/blocking.ts';
 import { safeFetch, type FetchError, type FetchOptions, type Hop } from './net/safe-request.ts';
 import type { HostInfo } from './net/target.ts';
 
@@ -24,15 +25,18 @@ export type HeaderScan = {
 	readonly status: number;
 	readonly hops: readonly Hop[];
 	readonly headers: Evidence;
+	readonly blockedBy?: BlockProvider;
 	readonly sections: {
-		readonly connection: CheckResult;
-		readonly headers: CheckResult;
+		readonly connection: SectionResult;
+		readonly headers: SectionResult;
 	};
 };
 
 export type HeaderScanResult =
 	| { readonly ok: true; readonly scan: HeaderScan }
 	| { readonly ok: false; readonly error: FetchError; readonly detail?: string };
+
+const BLOCKED: SectionResult = { status: 'blocked', findings: [], passed: [], notes: [] };
 
 export async function scanHeaders(target: HostInfo, options: FetchOptions = {}): Promise<HeaderScanResult> {
 	const result = await safeFetch(new URL(`https://${target.host}/`), options);
@@ -47,6 +51,14 @@ export async function scanHeaders(target: HostInfo, options: FetchOptions = {}):
 			shown[name] = values;
 		}
 	}
+	const blockedBy = detectBlock(page);
+	const sections =
+		blockedBy === null
+			? {
+					connection: { status: 'ok' as const, ...checkHsts(page.headers, new URL(page.url).protocol === 'https:') },
+					headers: { status: 'ok' as const, ...checkHeaders(page.headers) }
+				}
+			: { connection: BLOCKED, headers: BLOCKED };
 	return {
 		ok: true,
 		scan: {
@@ -56,10 +68,8 @@ export async function scanHeaders(target: HostInfo, options: FetchOptions = {}):
 			status: page.status,
 			hops: page.hops,
 			headers: capEvidence(shown),
-			sections: {
-				connection: checkHsts(page.headers, new URL(page.url).protocol === 'https:'),
-				headers: checkHeaders(page.headers)
-			}
+			...(blockedBy === null ? {} : { blockedBy }),
+			sections
 		}
 	};
 }
