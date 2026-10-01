@@ -6,6 +6,8 @@ import { capEvidence } from './checks/evidence.ts';
 import { checkHeaders } from './checks/headers.ts';
 import type { SectionId } from './contract/codes.ts';
 import type { CheckResult, Evidence, Finding, HeaderMap, Note, SectionResult } from './contract/types.ts';
+import { score, SCORING_VERSION, type Grade } from './grade.ts';
+import type { FindingCode } from './contract/codes.ts';
 import type { AddressPolicy } from './net/address-policy.ts';
 import { detectBlock, type BlockProvider } from './net/blocking.ts';
 import type { RecordClient } from './net/dns-records.ts';
@@ -35,6 +37,11 @@ export type SiteScan = {
 	readonly headers: Evidence;
 	readonly blockedBy?: BlockProvider;
 	readonly sections: Readonly<Record<SectionId, SectionResult>>;
+	readonly score: number;
+	readonly grade: Grade;
+	readonly partial: boolean;
+	readonly urgent: readonly FindingCode[];
+	readonly scoringVersion: string;
 };
 
 export type SiteScanResult = { readonly ok: true; readonly scan: SiteScan } | { readonly ok: false; readonly error: FetchError };
@@ -159,6 +166,13 @@ export async function scanSite(target: HostInfo, resolution: Extract<Resolution,
 	const blockedBy = page !== undefined && page.stop === undefined ? detectBlock(page) : null;
 	const blocked = blockedBy !== null;
 	const web = webSections(page, blocked, securityTxt, now);
+	const sections = {
+		connection: connectionSection(target.host, tls, https, http, page, blocked, now),
+		headers: web.headers,
+		cookies: web.cookies,
+		content: web.content,
+		email
+	};
 	return {
 		ok: true,
 		scan: {
@@ -169,13 +183,9 @@ export async function scanSite(target: HostInfo, resolution: Extract<Resolution,
 			hops: https.ok ? https.page.hops : https.hops,
 			headers: shownHeaders(page),
 			...(blockedBy === null ? {} : { blockedBy }),
-			sections: {
-				connection: connectionSection(target.host, tls, https, http, page, blocked, now),
-				headers: web.headers,
-				cookies: web.cookies,
-				content: web.content,
-				email
-			}
+			sections,
+			...score(sections),
+			scoringVersion: SCORING_VERSION
 		}
 	};
 }

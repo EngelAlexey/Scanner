@@ -132,7 +132,7 @@ export function checkCookies(setCookies: readonly SetCookie[], now: Date): Check
 	const findings = [
 		...finding('session-cookie-no-secure', names(session, (cookie) => !cookie.secure)),
 		...finding('session-cookie-no-httponly', names(session, (cookie) => !cookie.httpOnly)),
-		...finding('cookie-no-samesite', names(kept, (cookie) => cookie.sameSite === 'absent' || cookie.sameSite === 'invalid')),
+		...finding('cookie-no-samesite', names(session, (cookie) => cookie.sameSite === 'absent' || cookie.sameSite === 'invalid')),
 		...finding('cookie-no-secure', names(other, (cookie) => !cookie.secure)),
 		...finding('cookie-no-httponly', names(other, (cookie) => !cookie.httpOnly))
 	];

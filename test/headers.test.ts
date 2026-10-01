@@ -120,7 +120,7 @@ describe('Referrer-Policy', () => {
 		[['unsafe-url, strict-origin'], true],
 		[['strict-origin, unsafe-url'], false],
 		[['no-referrer-when-downgrade'], false],
-		[['bogus'], false],
+		[['bogus'], true],
 		[['origin-when-cross-origin, strict-origin-when-cross-origin'], true]
 	] as const) {
 		test(`${values.join(' | ')} -> ${passes ? 'pass' : 'referrer-policy-missing'}`, () => {
@@ -128,6 +128,11 @@ describe('Referrer-Policy', () => {
 			assert.equal(result.passed.includes('referrer-policy'), passes);
 		});
 	}
+
+	test('a missing policy passes, because browsers default to strict-origin-when-cross-origin', () => {
+		const result = checkHeaders(withHeaders({ 'referrer-policy': undefined }));
+		assert.ok(result.passed.includes('referrer-policy'));
+	});
 
 	test('a meta referrer overrides the header', () => {
 		const result = checkHeaders(withHeaders({ 'referrer-policy': ['unsafe-url'] }), { metaReferrer: 'no-referrer' });

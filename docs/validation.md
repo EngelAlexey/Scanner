@@ -140,3 +140,52 @@ La referencia son los registros TXT y CAA que devuelve 1.1.1.1, consultados el 2
 | twitter.com | Sin CAA en el dominio | `caa-missing` |
 
 Coinciden las 15 filas.
+
+## Fase 4: calibración de la nota (2026-10-01)
+
+`pnpm calibrate scripts/sites.txt` analizó 28 sitios: grandes servicios, sitios técnicos, medios, gobiernos y sitios de Costa Rica. La primera tabla de penalizaciones (versión 1.0.0) es la del plan de producto: crítica 40, alta 15, media 7, baja 3 e informativa 0, con la nota limitada a D si hay un hallazgo crítico.
+
+Con la versión 1.0.0, Wikipedia, el New York Times y Cloudflare bajaban a D, y Apple y Microsoft a C, por dos reglas que no tenían un riesgo equivalente:
+
+- **Referrer-Policy ausente.** Los navegadores aplican `strict-origin-when-cross-origin` cuando el sitio no envía la cabecera, y Observatory no la penaliza. En la versión 1.1.0, la ausencia aprueba. Un valor que filtra la dirección completa (`unsafe-url` o `no-referrer-when-downgrade`) sigue dando `referrer-policy-missing`.
+- **SameSite en cookies que no son de sesión.** Sin credenciales no hay ataque de solicitud cruzada. En la versión 1.1.0, `cookie-no-samesite` solo se aplica a las cookies de sesión.
+
+| Sitio | 1.0.0 | 1.1.0 |
+|---|---|---|
+| alexherrera.dev | 57 F | 57 F |
+| github.com | 97 A | 97 A |
+| www.google.com | 69 D | 69 D |
+| wikipedia.org | 67 D | 77 C |
+| mozilla.org | 90 A | 90 A |
+| developer.mozilla.org | 97 A | 97 A |
+| vercel.com | 90 A | 90 A |
+| netlify.com | 77 C | 80 B |
+| cloudflare.com | 68 D | 75 C |
+| stackoverflow.com | 100 A, parcial | 100 A, parcial |
+| npmjs.com | 100 A, parcial | 100 A, parcial |
+| nodejs.org | 55 F | 58 F |
+| python.org | 71 C | 74 C |
+| www.gov.uk | 64 D | 64 D |
+| www.bbc.co.uk | 100 A | 100 A |
+| www.nytimes.com | 62 D | 72 C |
+| www.apple.com | 77 C | 84 B |
+| www.microsoft.com | 77 C | 80 B |
+| www.shopify.com | 74 C | 77 C |
+| wordpress.org | 81 B | 84 B |
+| stripe.com | 94 A | 94 A |
+| www.paypal.com | 94 A | 97 A |
+| example.com | 29 F | 32 F |
+| www.bancobcr.com | 74 C | 77 C |
+| www.nacion.com | 45 F | 48 F |
+| www.ucr.ac.cr | 18 F | 21 F |
+| www.hacienda.go.cr | 80 B | 87 B |
+| www.ccss.sa.cr | 77 C | 84 B |
+
+Con la versión 1.1.0 quedan 9 sitios con A, 6 con B, 6 con C, 2 con D y 5 con F. Ningún sitio bien mantenido baja de B solo por hallazgos bajos.
+
+Puntos a vigilar:
+
+- **TLS 1.0 y 1.1.** `tls-legacy` resta 15 puntos a Google, Cloudflare, nodejs.org y example.com. Es el mismo tope que aplica SSL Labs, que limita la nota a B cuando el servidor acepta esas versiones.
+- **Secciones bloqueadas.** stackoverflow.com y npmjs.com bloquearon cabeceras, cookies y contenido, así que su nota de 100 solo mide la conexión y el correo. La interfaz debe mostrar que es una nota parcial.
+- **Certificados de 45 días.** Let's Encrypt ofrece certificados de 45 días, que se renuevan con unos 15 días de margen. Si se generalizan, `cert-expires-30d` marcará sitios sanos.
+- **Dominios bajo un sufijo público como `gov.uk`.** El dominio registrable de www.gov.uk es el propio host, que no publica SPF ni DMARC, así que la sección de correo resta 33 puntos.

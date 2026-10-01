@@ -77,9 +77,9 @@ describe('checkCookies', () => {
 		]);
 	});
 
-	test('reports missing or invalid SameSite and lists each cookie once', () => {
-		const result = check('a=1; Secure; HttpOnly', 'b=2; Secure; HttpOnly; SameSite=Maybe', 'a=3; Secure; HttpOnly');
-		assert.deepEqual(result.findings, [{ code: 'cookie-no-samesite', evidence: { cookies: ['a', 'b'] } }]);
+	test('reports session cookies with missing or invalid SameSite and lists each cookie once', () => {
+		const result = check('session_a=1; Secure; HttpOnly', 'auth_b=2; Secure; HttpOnly; SameSite=Maybe', 'session_a=3; Secure; HttpOnly', 'theme=1; Secure; HttpOnly');
+		assert.deepEqual(result.findings, [{ code: 'cookie-no-samesite', evidence: { cookies: ['auth_b', 'session_a'] } }]);
 	});
 
 	test('notes SameSite=None without Secure, which the browser rejects', () => {

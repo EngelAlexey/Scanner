@@ -34,7 +34,12 @@ function harness(overrides: Partial<ScanRequestDeps> = {}, verdict: TurnstileRes
 				cookies: { status: 'ok', findings: [], passed: [], notes: [] },
 				content: { status: 'ok', findings: [], passed: [], notes: [] },
 				email: { status: 'ok', findings: [], passed: [], notes: [] }
-			}
+			},
+			score: 100,
+			grade: 'A',
+			partial: false,
+			urgent: [],
+			scoringVersion: '1.0.0'
 		}
 	};
 	const deps: ScanRequestDeps = {

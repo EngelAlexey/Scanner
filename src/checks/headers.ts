@@ -163,8 +163,8 @@ export function checkHeaders(headers: HeaderMap, extras: HeaderExtras = {}): Che
 	}
 
 	const referrer = effectiveReferrerPolicy(headers['referrer-policy'], extras.metaReferrer);
-	if (referrer === undefined || UNSAFE_REFERRER_POLICIES.has(referrer)) {
-		findings.push(referrer === undefined ? { code: 'referrer-policy-missing' } : { code: 'referrer-policy-missing', evidence: { value: referrer } });
+	if (referrer !== undefined && UNSAFE_REFERRER_POLICIES.has(referrer)) {
+		findings.push({ code: 'referrer-policy-missing', evidence: { value: referrer } });
 	} else {
 		passed.push('referrer-policy');
 	}

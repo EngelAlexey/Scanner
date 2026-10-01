@@ -11,7 +11,8 @@
 		"check": "tsc --noEmit",
 		"scan": "node scripts/scan.ts",
 		"export-codes": "node scripts/export-codes.ts",
-		"migrate": "node --env-file-if-exists=.env.local scripts/migrate.ts"
+		"migrate": "node --env-file-if-exists=.env.local scripts/migrate.ts",
+		"calibrate": "node scripts/calibrate.ts"
 	},
 	"devDependencies": {
 		"@types/node": "^24.19.0",
