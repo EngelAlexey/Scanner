@@ -168,7 +168,7 @@ function checkCertificate(handshake: Extract<Handshake, { ok: true }>, now: Date
 	}
 }
 
-export function checkTls(probe: TlsProbe, now: Date): CheckResult {
+export function checkTls(probe: TlsProbe, now: Date, httpsServed = false): CheckResult {
 	const findings: Finding[] = [];
 	const passed: PassedCheck[] = [];
 	const { handshake } = probe;
@@ -180,6 +180,8 @@ export function checkTls(probe: TlsProbe, now: Date): CheckResult {
 			findings.push({ code: 'tls13-missing', evidence: { protocol: PROTOCOL_LABELS[handshake.protocol] ?? handshake.protocol } });
 		}
 		checkCertificate(handshake, now, findings, passed);
+	} else if (httpsServed) {
+		passed.push('https');
 	} else {
 		findings.push({ code: 'https-unavailable' });
 	}

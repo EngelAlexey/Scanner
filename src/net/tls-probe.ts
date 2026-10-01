@@ -37,6 +37,7 @@ export type TlsProbeOptions = {
 const DEFAULT_PORT = 443;
 const DEFAULT_TIMEOUT_MS = 5000;
 const LEGACY_CIPHERS = 'DEFAULT:@SECLEVEL=0';
+const TRANSIENT_ERRORS = new Set(['ECONNRESET', 'EPIPE']);
 const LOCAL_ERRORS = new Set([
 	'ERR_SSL_NO_PROTOCOLS_AVAILABLE',
 	'ERR_SSL_NO_CIPHERS_AVAILABLE',
@@ -127,8 +128,16 @@ function describe(host: string, socket: tls.TLSSocket): Handshake {
 	};
 }
 
+async function attemptTwice(host: string, address: string, options: TlsProbeOptions, versions: tls.ConnectionOptions): Promise<Attempt> {
+	const first = await attempt(host, address, options, versions);
+	if (first.ok || first.timedOut || !TRANSIENT_ERRORS.has(first.code)) {
+		return first;
+	}
+	return attempt(host, address, options, versions);
+}
+
 async function handshake(host: string, address: string, options: TlsProbeOptions): Promise<Handshake> {
-	const result = await attempt(host, address, options, { minVersion: 'TLSv1.2' });
+	const result = await attemptTwice(host, address, options, { minVersion: 'TLSv1.2' });
 	if (!result.ok) {
 		if (result.timedOut) {
 			return { ok: false, error: 'timeout' };
@@ -141,7 +150,7 @@ async function handshake(host: string, address: string, options: TlsProbeOptions
 }
 
 async function versionSupport(host: string, address: string, options: TlsProbeOptions, version: SecureVersion): Promise<VersionSupport> {
-	const result = await attempt(host, address, options, { minVersion: version, maxVersion: version, ciphers: LEGACY_CIPHERS });
+	const result = await attemptTwice(host, address, options, { minVersion: version, maxVersion: version, ciphers: LEGACY_CIPHERS });
 	if (result.ok) {
 		const negotiated = result.socket.getProtocol();
 		result.socket.destroy();
@@ -154,10 +163,8 @@ async function versionSupport(host: string, address: string, options: TlsProbeOp
 }
 
 export async function probeTls(host: string, address: string, options: TlsProbeOptions = {}): Promise<TlsProbe> {
-	const [main, tls10, tls11] = await Promise.all([
-		handshake(host, address, options),
-		versionSupport(host, address, options, 'TLSv1'),
-		versionSupport(host, address, options, 'TLSv1.1')
-	]);
+	const main = await handshake(host, address, options);
+	const tls10 = await versionSupport(host, address, options, 'TLSv1');
+	const tls11 = await versionSupport(host, address, options, 'TLSv1.1');
 	return { handshake: main, tls10, tls11 };
 }

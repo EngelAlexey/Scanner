@@ -168,3 +168,10 @@ describe('HSTS preload', () => {
 		assert.deepEqual(checkHttpRedirect({ ok: true, page }), { findings: [], passed: [], notes: [] });
 	});
 });
+
+describe('checkTls with a served HTTPS page', () => {
+	test('does not report HTTPS as unavailable when the page arrived over HTTPS', () => {
+		const probe: TlsProbe = { handshake: { ok: false, error: 'failed' }, tls10: 'rejected', tls11: 'rejected' };
+		assert.deepEqual(checkTls(probe, new Date('2026-10-05T12:00:00Z'), true), { findings: [], passed: ['https', 'tls-legacy'], notes: [] });
+	});
+});

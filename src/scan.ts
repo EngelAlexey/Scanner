@@ -104,7 +104,8 @@ function connectionSection(host: string, tls: TlsProbe | undefined, https: Fetch
 	const preloaded = preloadedTld(host);
 	const hsts = page !== undefined && !blocked && page.url.startsWith('https:') ? checkHsts(page.headers, true, preloaded) : { findings: [], passed: [], notes: [] };
 	const notes = https.ok ? cdnNote(https.page.headers) : [];
-	return section('ok', merge(checkTls(tls, now), { findings: downgrade, passed: [], notes }, checkHttpRedirect(http, preloaded), hsts));
+	const httpsServed = page !== undefined && page.url.startsWith('https:');
+	return section('ok', merge(checkTls(tls, now, httpsServed), { findings: downgrade, passed: [], notes }, checkHttpRedirect(http, preloaded), hsts));
 }
 
 function webSections(page: FetchedPage | undefined, blocked: boolean, securityTxt: FetchResult, now: Date): Pick<Record<SectionId, SectionResult>, 'headers' | 'cookies' | 'content'> {
@@ -138,15 +139,16 @@ export async function scanSite(target: HostInfo, resolution: Extract<Resolution,
 	const address = resolution.ipv4[0];
 	const sideRequest = { ...fetchOptions, timeoutMs: SIDE_REQUEST_TIMEOUT_MS };
 
-	const [tls, https, http, securityTxt, email] = await Promise.all([
+	const emailTask = checkEmail(target, dns, signal);
+	const httpTask = safeFetch(urlFor('http', target.host, ports.http), { ...sideRequest, stopAtHttps: true, maxBytes: HTTP_MAX_BYTES });
+	const https = await safeFetch(urlFor('https', target.host, ports.https), fetchOptions);
+	const [tls, securityTxt] = await Promise.all([
 		address === undefined
 			? undefined
 			: probeTls(target.host, address, { port: ports.https, signal, ...(options.tlsCa === undefined ? {} : { ca: options.tlsCa }) }),
-		safeFetch(urlFor('https', target.host, ports.https), fetchOptions),
-		safeFetch(urlFor('http', target.host, ports.http), { ...sideRequest, stopAtHttps: true, maxBytes: HTTP_MAX_BYTES }),
-		safeFetch(urlFor('https', target.host, ports.https, '/.well-known/security.txt'), { ...sideRequest, maxBytes: SECURITY_TXT_MAX_BYTES }),
-		checkEmail(target, dns, signal)
+		safeFetch(urlFor('https', target.host, ports.https, '/.well-known/security.txt'), { ...sideRequest, maxBytes: SECURITY_TXT_MAX_BYTES })
 	]);
+	const [http, email] = await Promise.all([httpTask, emailTask]);
 
 	const httpDown = !http.ok && UNREACHABLE.has(http.error);
 	if (!https.ok && UNREACHABLE.has(https.error) && (tls === undefined || !tls.handshake.ok) && httpDown && address !== undefined) {
