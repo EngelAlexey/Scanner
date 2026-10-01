@@ -233,10 +233,8 @@ async function checkDmarc(domain: string, lookup: Lookup): Promise<Outcome> {
 	const declared = tags.get('p')?.toLowerCase();
 	const policy = declared === 'quarantine' || declared === 'reject' ? declared : 'none';
 	const testing = tags.get('t')?.toLowerCase() === 'y';
-	const percent = tags.get('pct');
-	const partial = percent !== undefined && Number(percent) < 100;
 	const effective = testing ? (policy === 'reject' ? 'quarantine' : 'none') : policy;
-	const notes: Note[] = testing || partial ? ['dmarc-testing'] : [];
+	const notes: Note[] = testing ? ['dmarc-testing'] : [];
 	if (effective === 'none') {
 		return { finding: { code: 'dmarc-policy-none', evidence: capEvidence({ record }) }, notes };
 	}

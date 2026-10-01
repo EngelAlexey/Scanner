@@ -126,12 +126,13 @@ describe('checkEmail: DMARC', () => {
 		assert.deepEqual(codes(await scan(withDmarc(['v=DMARC1;p=reject']))), []);
 	});
 
-	test('notes testing mode and partial enforcement', async () => {
+	test('notes testing mode and ignores pct, which RFC 9989 removed', async () => {
 		const testing = await scan(withDmarc(['v=DMARC1; p=reject; t=y']));
-		const partial = await scan(withDmarc(['v=DMARC1; p=reject; pct=50']));
+		const legacy = await scan(withDmarc(['v=DMARC1; p=reject; pct=50']));
 		assert.deepEqual(codes(testing), []);
 		assert.ok(testing.notes.includes('dmarc-testing'));
-		assert.ok(partial.notes.includes('dmarc-testing'));
+		assert.deepEqual(codes(legacy), []);
+		assert.ok(!legacy.notes.includes('dmarc-testing'));
 	});
 
 	test('reports a domain without a _dmarc name', async () => {

@@ -93,6 +93,18 @@ describe('checkTls', () => {
 		assert.deepEqual(checkTls(in5Days, NOW).findings, [{ code: 'cert-expires-7d', evidence: { expires: '2026-10-10' } }]);
 	});
 
+	test('scales the expiry windows down for short-lived certificates', () => {
+		const lasting = (from: string, to: string) => withHandshake({ certificate: { ...certificate, validFrom: from, validTo: to } });
+		const codes = (probe: TlsProbe, at: Date) => checkTls(probe, at).findings.map((finding) => finding.code);
+		assert.deepEqual(codes(lasting('2026-09-10T12:00:00.000Z', '2026-10-25T12:00:00.000Z'), NOW), []);
+		assert.deepEqual(codes(lasting('2026-09-02T12:00:00.000Z', '2026-10-17T12:00:00.000Z'), NOW), ['cert-expires-30d']);
+		assert.deepEqual(codes(lasting('2026-08-26T12:00:00.000Z', '2026-10-10T12:00:00.000Z'), NOW), ['cert-expires-7d']);
+		const shortLived = lasting('2026-10-03T12:00:00.000Z', '2026-10-10T04:00:00.000Z');
+		assert.deepEqual(codes(shortLived, new Date('2026-10-04T12:00:00Z')), []);
+		assert.deepEqual(codes(shortLived, new Date('2026-10-08T12:00:00Z')), ['cert-expires-30d']);
+		assert.deepEqual(codes(shortLived, new Date('2026-10-09T12:00:00Z')), ['cert-expires-7d']);
+	});
+
 	test('treats a certificate that is not valid yet as expired', () => {
 		assert.deepEqual(codes(withHandshake({ certificate: { ...certificate, validFrom: '2026-11-01T00:00:00.000Z' } })), ['cert-expired']);
 	});

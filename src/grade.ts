@@ -1,7 +1,7 @@
 import { FINDING_CODES, FINDINGS, SEVERITIES, type FindingCode, type SectionId, type Severity } from './contract/codes.ts';
 import type { SectionResult } from './contract/types.ts';
 
-export const SCORING_VERSION = '1.1.0';
+export const SCORING_VERSION = '1.2.0';
 
 export const PENALTIES: Readonly<Record<Severity, number>> = { critical: 40, high: 15, medium: 7, low: 3, info: 0 };
 

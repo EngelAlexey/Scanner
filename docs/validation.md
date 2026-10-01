@@ -190,3 +190,13 @@ Puntos a vigilar:
 - **Secciones bloqueadas.** stackoverflow.com y npmjs.com bloquearon cabeceras, cookies y contenido, así que su nota de 100 solo mide la conexión y el correo. La interfaz debe mostrar que es una nota parcial.
 - **Certificados de 45 días.** Let's Encrypt ofrece certificados de 45 días, que se renuevan con unos 15 días de margen. Si se generalizan, `cert-expires-30d` marcará sitios sanos.
 - **Dominios bajo un sufijo público como `gov.uk`.** El dominio registrable de www.gov.uk es el propio host, que no publica SPF ni DMARC, así que la sección de correo resta 33 puntos.
+
+## Versión 1.2.0 de las reglas (2026-10-01)
+
+Los umbrales de vencimiento eran fijos: 30 días para `cert-expires-30d` y 7 días para `cert-expires-7d`. Con los certificados cortos, eso marcaba sitios cuya renovación funcionaba. Let's Encrypt ofrece certificados de 45 días, y Certbot 4.0 o posterior los renueva cuando queda un tercio de la vigencia, es decir, 15 días. Los certificados de 160 horas del perfil `shortlived` nunca llegan a 7 días, así que daban siempre el hallazgo de severidad alta.
+
+Desde la versión 1.2.0, cada umbral tiene un tope relativo a la vigencia del certificado. `cert-expires-30d` aparece con menos de 30 días o menos de un tercio de la vigencia, lo que sea menor. `cert-expires-7d` aparece con menos de 7 días o menos de una sexta parte. Para un certificado de 90 días no cambia nada. Para uno de 45 días, los umbrales son 15 y 7 días. Para uno de 160 horas, unas 53 y 27 horas.
+
+La misma versión deja de tratar `pct` de DMARC como modo de prueba. La RFC 9989, que sustituye a la RFC 7489 desde mayo de 2026, eliminó esa etiqueta. Solo `t=y` da la observación `dmarc-testing`.
+
+Límite conocido: `cert-chain-incomplete` sale también con un certificado de una autoridad privada enviado sin su cadena. Node da el mismo error en los dos casos. Distinguirlos exigiría descargar el certificado intermedio desde la dirección que indica el propio certificado.

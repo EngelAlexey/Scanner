@@ -114,6 +114,8 @@ const UNTRUSTED_ERRORS = new Set([
 	'CA_MD_TOO_WEAK'
 ]);
 const DAY_MS = 86_400_000;
+const URGENT_EXPIRY_MS = 7 * DAY_MS;
+const SOON_EXPIRY_MS = 30 * DAY_MS;
 const PROTOCOL_LABELS: Readonly<Record<string, string>> = {
 	'TLSv1': 'TLS 1.0',
 	'TLSv1.1': 'TLS 1.1',
@@ -157,10 +159,11 @@ function checkCertificate(handshake: Extract<Handshake, { ok: true }>, now: Date
 		passed.push('cert-chain');
 	}
 	if (!expired) {
-		const daysLeft = (validTo - now.getTime()) / DAY_MS;
-		if (daysLeft < 7) {
+		const remaining = validTo - now.getTime();
+		const lifetime = Number.isNaN(validFrom) ? Number.POSITIVE_INFINITY : validTo - validFrom;
+		if (remaining < Math.min(URGENT_EXPIRY_MS, lifetime / 6)) {
 			findings.push({ code: 'cert-expires-7d', evidence: { expires: day(validTo) } });
-		} else if (daysLeft < 30) {
+		} else if (remaining < Math.min(SOON_EXPIRY_MS, lifetime / 3)) {
 			findings.push({ code: 'cert-expires-30d', evidence: { expires: day(validTo) } });
 		} else {
 			passed.push('cert-expiry');
