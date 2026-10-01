@@ -330,7 +330,7 @@ describe('safeFetch over HTTPS', () => {
 		assert.ok(result.ok);
 		assert.equal(result.page.status, 302);
 		assert.deepEqual(result.page.stop, { reason: 'downgrade', location: `http://ok.fixture-scan.dev:${port}/` });
-		assert.deepEqual(result.page.cookies, ['sid=1; Secure; HttpOnly']);
+		assert.deepEqual(result.page.cookies, [{ host: 'ok.fixture-scan.dev', header: 'sid=1; Secure; HttpOnly' }]);
 		assert.equal(hits.length, 0);
 	});
 });

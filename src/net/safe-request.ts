@@ -47,6 +47,11 @@ export type Hop = {
 	readonly location: string;
 };
 
+export type SetCookie = {
+	readonly host: string;
+	readonly header: string;
+};
+
 export type FetchStop = {
 	readonly reason: 'https' | 'offsite' | 'downgrade';
 	readonly location: string;
@@ -60,7 +65,7 @@ export type FetchedPage = {
 	readonly truncated: boolean;
 	readonly bodyReadable: boolean;
 	readonly hops: readonly Hop[];
-	readonly cookies: readonly string[];
+	readonly cookies: readonly SetCookie[];
 	readonly stop?: FetchStop;
 };
 
@@ -287,7 +292,7 @@ export async function safeFetch(start: URL, options: FetchOptions = {}): Promise
 	const timeout = AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 	const signal = options.signal ? AbortSignal.any([timeout, options.signal]) : timeout;
 	const hops: Hop[] = [];
-	const cookies: string[] = [];
+	const cookies: SetCookie[] = [];
 	const visited = new Set<string>();
 	const resolutions = new Map<string, Resolution>();
 	for (const [host, seeded] of options.resolutions ?? []) {
@@ -332,7 +337,7 @@ export async function safeFetch(start: URL, options: FetchOptions = {}): Promise
 		}
 
 		if (url.protocol === 'https:') {
-			cookies.push(...(response.headers['set-cookie'] ?? []));
+			cookies.push(...(response.headers['set-cookie'] ?? []).map((header) => ({ host: url.hostname, header })));
 		}
 
 		const current = url;
