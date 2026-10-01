@@ -2,8 +2,8 @@ import { after, before, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { gzipSync } from 'node:zlib';
-import type { DnsClient } from '../src/net/resolver.ts';
+import { brotliCompressSync, gzipSync } from 'node:zlib';
+import type { DnsClient, Resolution } from '../src/net/resolver.ts';
 import { DEFAULT_MAX_BYTES, safeFetch } from '../src/net/safe-request.ts';
 import { fakeDns } from './helpers/fake-dns.ts';
 import { testAddressPolicy } from './helpers/test-policy.ts';
@@ -65,6 +65,35 @@ function handle(request: IncomingMessage, response: ServerResponse): void {
 			response.writeHead(200, { 'Content-Type': 'text/html', 'Content-Encoding': 'gzip' });
 			response.end(gzipSync(Buffer.alloc(10 * 1024 * 1024)));
 			return;
+		case '/brotli-bomb':
+			response.writeHead(200, { 'Content-Type': 'text/html', 'Content-Encoding': 'br' });
+			response.end(brotliCompressSync(Buffer.alloc(10 * 1024 * 1024)));
+			return;
+		case '/endless': {
+			response.writeHead(200, { 'Content-Type': 'text/html' });
+			const chunk = Buffer.alloc(64 * 1024, 'a');
+			const pump = (): void => {
+				if (!response.destroyed && response.write(chunk)) {
+					setImmediate(pump);
+				}
+			};
+			response.on('drain', pump);
+			pump();
+			return;
+		}
+		case '/false-length':
+			response.writeHead(200, { 'Content-Type': 'text/html', 'Content-Length': String(1024 * 1024 * 1024) });
+			response.write(Buffer.alloc(3 * 1024 * 1024, 'a'));
+			return;
+		case '/drip': {
+			response.writeHead(200, { 'Content-Type': 'text/html' });
+			const timer = setInterval(() => response.write('a'), 100);
+			response.on('close', () => clearInterval(timer));
+			return;
+		}
+		case '/malformed':
+			request.socket.end('HTTP/1.1 200 OK\r\nX-Odd: a\u0001b\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok');
+			return;
 		case '/slow':
 			return;
 		default:
@@ -80,12 +109,24 @@ const zone = {
 	'other-site.dev': { a: ['127.0.0.1'] }
 };
 
-function fetchPath(path: string, options: { dns?: DnsClient; timeoutMs?: number } = {}) {
+type PathOptions = {
+	readonly dns?: DnsClient;
+	readonly timeoutMs?: number;
+	readonly resolutions?: ReadonlyMap<string, Resolution>;
+	readonly extraAddresses?: readonly string[];
+};
+
+function fetchPath(path: string, options: PathOptions = {}) {
 	return safeFetch(new URL(`http://ok.fixture-scan.dev:${port}${path}`), {
-		policy: testAddressPolicy(port),
+		policy: testAddressPolicy(port, options.extraAddresses),
 		dns: options.dns ?? fakeDns(zone),
-		...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs })
+		...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+		...(options.resolutions === undefined ? {} : { resolutions: options.resolutions })
 	});
+}
+
+function seeded(...ipv4: string[]): ReadonlyMap<string, Resolution> {
+	return new Map([['ok.fixture-scan.dev', { ok: true, ipv4, ipv6: [] }]]);
 }
 
 before(async () => {
@@ -185,5 +226,57 @@ describe('safeFetch', () => {
 	test('gives up on a server that never answers', async () => {
 		const result = await fetchPath('/slow', { timeoutMs: 300 });
 		assert.equal(result.ok ? 'ok' : result.error, 'timeout');
+	});
+
+	test('gives up on a body that arrives one byte at a time', async () => {
+		const result = await fetchPath('/drip', { timeoutMs: 300 });
+		assert.equal(result.ok ? 'ok' : result.error, 'timeout');
+	});
+
+	test('cuts a brotli bomb at 2 MB after decompression', async () => {
+		const result = await fetchPath('/brotli-bomb');
+		assert.ok(result.ok);
+		assert.equal(result.page.truncated, true);
+		assert.equal(result.page.body.length, DEFAULT_MAX_BYTES);
+	});
+
+	test('cuts a body that never ends at 2 MB', async () => {
+		const result = await fetchPath('/endless');
+		assert.ok(result.ok);
+		assert.equal(result.page.truncated, true);
+		assert.equal(result.page.body.length, DEFAULT_MAX_BYTES);
+	});
+
+	test('ignores a false Content-Length and keeps 2 MB', async () => {
+		const result = await fetchPath('/false-length');
+		assert.ok(result.ok);
+		assert.equal(result.page.truncated, true);
+		assert.equal(result.page.body.length, DEFAULT_MAX_BYTES);
+	});
+
+	test('retries once with the lenient parser when a header is malformed', async () => {
+		const result = await fetchPath('/malformed');
+		assert.ok(result.ok);
+		assert.equal(result.page.status, 200);
+		assert.equal(hits.length, 2);
+	});
+
+	test('uses a seeded resolution without asking DNS again', async () => {
+		const dns = fakeDns({});
+		const result = await fetchPath('/', { dns, resolutions: seeded('127.0.0.1') });
+		assert.ok(result.ok);
+		assert.deepEqual(dns.queries, []);
+	});
+
+	test('rechecks a seeded resolution against the address policy', async () => {
+		const result = await fetchPath('/', { resolutions: seeded('10.0.0.1') });
+		assert.equal(result.ok ? 'ok' : result.error, 'blocked_address');
+		assert.equal(hits.length, 0);
+	});
+
+	test('tries the second IPv4 address when the first refuses the connection', async () => {
+		const result = await fetchPath('/', { resolutions: seeded('127.0.0.2', '127.0.0.1'), extraAddresses: ['127.0.0.2'] });
+		assert.ok(result.ok);
+		assert.equal(hits.length, 1);
 	});
 });

@@ -19,7 +19,9 @@ const REQUEST_HEADERS = {
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const RETRYABLE_CODES = new Set(['ECONNRESET', 'ETIMEDOUT']);
+const HEADER_OVERFLOW = 'HPE_HEADER_OVERFLOW';
 const MAX_HEADER_BYTES = 64 * 1024;
+const ADDRESS_ATTEMPTS = 2;
 
 export const DEFAULT_TIMEOUT_MS = 10_000;
 export const DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
@@ -65,6 +67,7 @@ export type FetchResult =
 export type FetchOptions = {
 	readonly policy?: AddressPolicy;
 	readonly dns?: DnsClient;
+	readonly resolutions?: ReadonlyMap<string, Resolution>;
 	readonly timeoutMs?: number;
 	readonly maxBytes?: number;
 	readonly maxRedirects?: number;
@@ -185,7 +188,7 @@ async function readLimited(
 	return { body: Buffer.concat(chunks), truncated, bodyReadable: true };
 }
 
-function requestOnce(url: URL, address: string, maxBytes: number, signal: AbortSignal): Promise<RawResponse> {
+function requestOnce(url: URL, address: string, maxBytes: number, signal: AbortSignal, lenientParser: boolean): Promise<RawResponse> {
 	return new Promise((resolve, reject) => {
 		const secure = url.protocol === 'https:';
 		const options: https.RequestOptions = {
@@ -196,6 +199,7 @@ function requestOnce(url: URL, address: string, maxBytes: number, signal: AbortS
 			headers: { ...REQUEST_HEADERS, Host: url.host, ...(secure ? {} : { 'Upgrade-Insecure-Requests': '1' }) },
 			agent: false,
 			maxHeaderSize: MAX_HEADER_BYTES,
+			insecureHTTPParser: lenientParser,
 			signal,
 			...(secure ? { servername: url.hostname, rejectUnauthorized: false } : {})
 		};
@@ -218,12 +222,19 @@ function requestOnce(url: URL, address: string, maxBytes: number, signal: AbortS
 	});
 }
 
+function errorCode(error: unknown): string {
+	return (error as NodeJS.ErrnoException).code ?? '';
+}
+
+function isParserError(code: string): boolean {
+	return code.startsWith('HPE_') && code !== HEADER_OVERFLOW;
+}
+
 function classify(error: unknown, signal: AbortSignal): FetchError {
 	if (signal.aborted) {
 		return 'timeout';
 	}
-	const code = (error as NodeJS.ErrnoException).code;
-	if (code === 'HPE_HEADER_OVERFLOW') {
+	if (errorCode(error) === HEADER_OVERFLOW) {
 		return 'headers_too_large';
 	}
 	return 'connection_failed';
@@ -231,14 +242,37 @@ function classify(error: unknown, signal: AbortSignal): FetchError {
 
 async function requestWithRetry(url: URL, address: string, maxBytes: number, signal: AbortSignal): Promise<RawResponse> {
 	try {
-		return await requestOnce(url, address, maxBytes, signal);
+		return await requestOnce(url, address, maxBytes, signal, false);
 	} catch (error) {
-		const code = (error as NodeJS.ErrnoException).code ?? '';
-		if (signal.aborted || !RETRYABLE_CODES.has(code)) {
+		const code = errorCode(error);
+		if (signal.aborted || !(RETRYABLE_CODES.has(code) || isParserError(code))) {
 			throw error;
 		}
-		return requestOnce(url, address, maxBytes, signal);
+		return requestOnce(url, address, maxBytes, signal, isParserError(code));
 	}
+}
+
+async function requestFirstReachable(url: URL, addresses: readonly string[], maxBytes: number, signal: AbortSignal): Promise<RawResponse> {
+	let failure: unknown;
+	for (const address of addresses.slice(0, ADDRESS_ATTEMPTS)) {
+		try {
+			return await requestWithRetry(url, address, maxBytes, signal);
+		} catch (error) {
+			const code = errorCode(error);
+			if (signal.aborted || code === HEADER_OVERFLOW || isParserError(code)) {
+				throw error;
+			}
+			failure = error;
+		}
+	}
+	throw failure;
+}
+
+function trustedResolution(resolution: Resolution, policy: AddressPolicy): Resolution {
+	if (resolution.ok && ![...resolution.ipv4, ...resolution.ipv6].every((address) => policy.isAllowedAddress(address))) {
+		return { ok: false, error: 'blocked_address' };
+	}
+	return resolution;
 }
 
 export async function safeFetch(start: URL, options: FetchOptions = {}): Promise<FetchResult> {
@@ -251,6 +285,9 @@ export async function safeFetch(start: URL, options: FetchOptions = {}): Promise
 	const cookies: string[] = [];
 	const visited = new Set<string>();
 	const resolutions = new Map<string, Resolution>();
+	for (const [host, seeded] of options.resolutions ?? []) {
+		resolutions.set(host, trustedResolution(seeded, policy));
+	}
 	const fail = (error: FetchError, detail?: string): FetchResult =>
 		detail === undefined ? { ok: false, error, hops } : { ok: false, error, hops, detail };
 
@@ -278,14 +315,13 @@ export async function safeFetch(start: URL, options: FetchOptions = {}): Promise
 			}
 			return fail(resolution.error === 'blocked_address' ? 'redirect_blocked' : 'redirect_invalid', hostname);
 		}
-		const address = resolution.ipv4[0];
-		if (address === undefined) {
+		if (resolution.ipv4.length === 0) {
 			return fail('ipv6_only', hostname);
 		}
 
 		let response: RawResponse;
 		try {
-			response = await requestWithRetry(url, address, maxBytes, signal);
+			response = await requestFirstReachable(url, resolution.ipv4, maxBytes, signal);
 		} catch (error) {
 			return fail(classify(error, signal));
 		}
