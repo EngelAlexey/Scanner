@@ -39,13 +39,16 @@ export type FetchError =
 	| 'too_many_redirects'
 	| 'redirect_loop'
 	| 'redirect_invalid'
-	| 'redirect_blocked'
-	| 'redirect_offsite'
-	| 'https_downgrade';
+	| 'redirect_blocked';
 
 export type Hop = {
 	readonly url: string;
 	readonly status: number;
+	readonly location: string;
+};
+
+export type FetchStop = {
+	readonly reason: 'https' | 'offsite' | 'downgrade';
 	readonly location: string;
 };
 
@@ -58,6 +61,7 @@ export type FetchedPage = {
 	readonly bodyReadable: boolean;
 	readonly hops: readonly Hop[];
 	readonly cookies: readonly string[];
+	readonly stop?: FetchStop;
 };
 
 export type FetchResult =
@@ -71,6 +75,7 @@ export type FetchOptions = {
 	readonly timeoutMs?: number;
 	readonly maxBytes?: number;
 	readonly maxRedirects?: number;
+	readonly stopAtHttps?: boolean;
 	readonly signal?: AbortSignal;
 };
 
@@ -330,21 +335,25 @@ export async function safeFetch(start: URL, options: FetchOptions = {}): Promise
 			cookies.push(...(response.headers['set-cookie'] ?? []));
 		}
 
+		const current = url;
+		const respond = (stop?: FetchStop): FetchResult => ({
+			ok: true,
+			page: {
+				url: current.href,
+				status: response.status,
+				headers: response.headers,
+				body: response.body,
+				truncated: response.truncated,
+				bodyReadable: response.bodyReadable,
+				hops,
+				cookies,
+				...(stop === undefined ? {} : { stop })
+			}
+		});
+
 		const locations = [...new Set(response.headers['location'] ?? [])];
 		if (!REDIRECT_STATUSES.has(response.status) || locations.length === 0) {
-			return {
-				ok: true,
-				page: {
-					url: url.href,
-					status: response.status,
-					headers: response.headers,
-					body: response.body,
-					truncated: response.truncated,
-					bodyReadable: response.bodyReadable,
-					hops,
-					cookies
-				}
-			};
+			return respond();
 		}
 		if (locations.length > 1) {
 			return fail('redirect_invalid');
@@ -363,15 +372,18 @@ export async function safeFetch(start: URL, options: FetchOptions = {}): Promise
 		if (visited.has(next.href)) {
 			return fail('redirect_loop', next.href);
 		}
+		if (options.stopAtHttps === true && next.protocol === 'https:') {
+			return respond({ reason: 'https', location: next.href });
+		}
 		if (secureReached && next.protocol === 'http:') {
-			return fail('https_downgrade', next.href);
+			return respond({ reason: 'downgrade', location: next.href });
 		}
 		const checked = checkUrl(next, policy);
 		if (!checked.ok) {
 			return fail(checked.reason === 'invalid' ? 'redirect_invalid' : 'redirect_blocked', next.host);
 		}
 		if (checked.info.siteDomain !== siteDomain) {
-			return fail('redirect_offsite', checked.info.host);
+			return respond({ reason: 'offsite', location: next.href });
 		}
 		secureReached = secureReached || next.protocol === 'https:';
 		url = next;

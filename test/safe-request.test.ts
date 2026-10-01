@@ -1,11 +1,13 @@
 import { after, before, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { createServer as createHttpsServer, type Server as HttpsServer } from 'node:https';
 import type { AddressInfo } from 'node:net';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 import type { DnsClient, Resolution } from '../src/net/resolver.ts';
 import { DEFAULT_MAX_BYTES, safeFetch } from '../src/net/safe-request.ts';
 import { fakeDns } from './helpers/fake-dns.ts';
+import { fixture } from './helpers/tls-fixtures.ts';
 import { testAddressPolicy } from './helpers/test-policy.ts';
 
 type Hit = { readonly host: string; readonly path: string };
@@ -50,6 +52,9 @@ function handle(request: IncomingMessage, response: ServerResponse): void {
 			return;
 		case '/to-offsite':
 			redirect(response, `http://other-site.dev:${port}/`);
+			return;
+		case '/to-https':
+			redirect(response, 'https://ok.fixture-scan.dev/');
 			return;
 		case '/loop-a':
 			redirect(response, '/loop-b');
@@ -187,11 +192,29 @@ describe('safeFetch', () => {
 		assert.equal(result.ok ? 'ok' : result.error, 'redirect_loop');
 	});
 
+	test('stops before another site and returns the last response of this one', async () => {
+		const result = await fetchPath('/to-offsite');
+		assert.ok(result.ok);
+		assert.equal(result.page.status, 302);
+		assert.deepEqual(result.page.stop, { reason: 'offsite', location: `http://other-site.dev:${port}/` });
+		assert.equal(hits.length, 1);
+	});
+
+	test('can stop at the first redirect to HTTPS without following it', async () => {
+		const result = await safeFetch(new URL(`http://ok.fixture-scan.dev:${port}/to-https`), {
+			policy: testAddressPolicy(port),
+			dns: fakeDns(zone),
+			stopAtHttps: true
+		});
+		assert.ok(result.ok);
+		assert.deepEqual(result.page.stop, { reason: 'https', location: 'https://ok.fixture-scan.dev/' });
+		assert.equal(hits.length, 1);
+	});
+
 	for (const [path, error] of [
 		['/to-private', 'redirect_blocked'],
 		['/to-ip', 'redirect_blocked'],
-		['/to-port', 'redirect_blocked'],
-		['/to-offsite', 'redirect_offsite']
+		['/to-port', 'redirect_blocked']
 	] as const) {
 		test(`stops at ${path} with ${error} before connecting to the target`, async () => {
 			const result = await fetchPath(path);
@@ -278,5 +301,36 @@ describe('safeFetch', () => {
 		const result = await fetchPath('/', { resolutions: seeded('127.0.0.2', '127.0.0.1'), extraAddresses: ['127.0.0.2'] });
 		assert.ok(result.ok);
 		assert.equal(hits.length, 1);
+	});
+});
+
+describe('safeFetch over HTTPS', () => {
+	let secure: HttpsServer;
+	let securePort = 0;
+
+	before(async () => {
+		secure = createHttpsServer({ key: fixture('leaf.key'), cert: fixture('ok.pem') + fixture('intermediate.pem') }, (request, response) => {
+			response.writeHead(302, { 'Location': `http://ok.fixture-scan.dev:${port}/`, 'Set-Cookie': 'sid=1; Secure; HttpOnly' });
+			response.end();
+		});
+		await new Promise<void>((resolve) => secure.listen(0, '127.0.0.1', resolve));
+		securePort = (secure.address() as AddressInfo).port;
+	});
+
+	after(() => {
+		secure.closeAllConnections();
+		secure.close();
+	});
+
+	test('stops at a downgrade to HTTP and keeps the HTTPS response', async () => {
+		const result = await safeFetch(new URL(`https://ok.fixture-scan.dev:${securePort}/`), {
+			policy: testAddressPolicy([port, securePort]),
+			dns: fakeDns(zone)
+		});
+		assert.ok(result.ok);
+		assert.equal(result.page.status, 302);
+		assert.deepEqual(result.page.stop, { reason: 'downgrade', location: `http://ok.fixture-scan.dev:${port}/` });
+		assert.deepEqual(result.page.cookies, ['sid=1; Secure; HttpOnly']);
+		assert.equal(hits.length, 0);
 	});
 });
