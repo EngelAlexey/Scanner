@@ -10,5 +10,6 @@ Antes de instalar un paquete, anótelo aquí con su nombre exacto, quién lo man
 | `tldts` | remusao (Rémi Berson) | Lista pública de sufijos: dominio registrable para el correo y sufijos privados como `vercel.app` | Producción |
 | `@vercel/functions` | Vercel | `ipAddress()` lee la IP del visitante en la cabecera `x-real-ip`, que fija Vercel. `waitUntil()` mantiene viva la función después de responder, desde la fase 5. Depende de `@vercel/oidc`, que da el token de AI Gateway en la fase 6 y trae 23 paquetes más, entre ellos `execa`, `jose` y `zod` | Producción |
 | `@neondatabase/serverless` | Neon | Cliente de Postgres por HTTP: cada consulta es una petición, sin conexiones abiertas entre invocaciones. No tiene dependencias | Producción |
+| `parse5` | inikulin, fb55, 43081j, rreverser y wooorm | Analizador HTML según la especificación de WHATWG: lee formularios, recursos y etiquetas `<meta>` de la página como lo haría un navegador, sin ejecutar nada. Depende de `entities`, de fb55 | Producción |
 
 `typescript` va en la versión mayor 6, la misma del portafolio. El 2026-09-30 ya existía la 7.0.2.

@@ -21,6 +21,7 @@
 		"@neondatabase/serverless": "1.1.0",
 		"@vercel/functions": "3.9.9",
 		"ipaddr.js": "^2.5.0",
+		"parse5": "8.0.1",
 		"tldts": "^7.4.16"
 	}
 }
