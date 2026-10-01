@@ -1,7 +1,7 @@
 import { readConfig, type ScanConfig } from './config.ts';
 import { resolveHost, type Resolution } from './net/resolver.ts';
 import { parseTarget, type HostInfo } from './net/target.ts';
-import { scanHeaders, type HeaderScanResult } from './scan.ts';
+import { scanSite, type SiteScanResult } from './scan.ts';
 import { scanningEnabled } from './security/availability.ts';
 import { readClientIp } from './security/client-ip.ts';
 import { allowedOrigins, corsHeaders, isAllowedOrigin } from './security/cors.ts';
@@ -19,7 +19,7 @@ export type ScanRequestDeps = {
 	readonly store: (config: ScanConfig) => RateLimitStore;
 	readonly verify: (token: string, remoteIp: string, config: ScanConfig) => Promise<TurnstileResult>;
 	readonly resolve: (host: string) => Promise<Resolution>;
-	readonly scan: (target: HostInfo, resolution: Resolution) => Promise<HeaderScanResult>;
+	readonly scan: (target: HostInfo, resolution: Extract<Resolution, { ok: true }>) => Promise<SiteScanResult>;
 };
 
 type ScanBody = {
@@ -36,7 +36,7 @@ export const defaultDeps: ScanRequestDeps = {
 		config.databaseUrl === undefined ? (localStore ??= memoryRateLimitStore()) : sqlRateLimitStore(sqlClient(config.databaseUrl)),
 	verify: (token, remoteIp, config) => verifyTurnstile(token, remoteIp, config.turnstile),
 	resolve: (host) => resolveHost(host),
-	scan: (target, resolution) => scanHeaders(target, { resolutions: new Map([[target.host, resolution]]) })
+	scan: (target, resolution) => scanSite(target, resolution)
 };
 
 async function readBody(request: Request): Promise<ScanBody | undefined> {
@@ -120,8 +120,7 @@ export async function handleScanRequest(request: Request, deps: ScanRequestDeps 
 
 	const result = await deps.scan(target.info, resolution);
 	if (!result.ok) {
-		const failure = result.detail === undefined ? { error: result.error } : { error: result.error, detail: result.detail };
-		return reply(failure, UNREACHABLE_ERRORS.has(result.error) ? 502 : 422);
+		return reply({ error: result.error }, UNREACHABLE_ERRORS.has(result.error) ? 502 : 422);
 	}
 	return reply(result.scan, 200);
 }

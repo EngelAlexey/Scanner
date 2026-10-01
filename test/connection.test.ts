@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkHsts, checkHttpRedirect, checkTls } from '../src/checks/connection.ts';
+import { checkHsts, checkHttpRedirect, checkTls, preloadedTld } from '../src/checks/connection.ts';
 import type { TlsProbe } from '../src/net/tls-probe.ts';
 import type { CheckResult } from '../src/contract/types.ts';
 
@@ -146,5 +146,25 @@ describe('checkHttpRedirect', () => {
 
 	test('neither passes nor fails a broken redirect chain', () => {
 		assert.deepEqual(checkHttpRedirect({ ok: false, error: 'redirect_loop', hops: [] }), { findings: [], passed: [], notes: [] });
+	});
+});
+
+describe('HSTS preload', () => {
+	test('finds hosts under a preloaded top-level domain', () => {
+		assert.equal(preloadedTld('www.example.dev'), 'dev');
+		assert.equal(preloadedTld('demo.vercel.app.'), 'app');
+		assert.equal(preloadedTld('octocat.github.io'), undefined);
+		assert.equal(preloadedTld('example.com'), undefined);
+	});
+
+	test('passes HSTS and the HTTP redirect with a note under a preloaded domain', () => {
+		assert.deepEqual(checkHsts({}, true, 'dev'), { findings: [], passed: ['hsts'], notes: ['hsts-preloaded:dev'] });
+		const page = { url: 'http://example.dev/', status: 200, headers: {}, body: Buffer.alloc(0), truncated: false, bodyReadable: true, hops: [], cookies: [] };
+		assert.deepEqual(checkHttpRedirect({ ok: true, page }, 'dev'), { findings: [], passed: ['http-redirect'], notes: [] });
+	});
+
+	test('gives no verdict when port 80 answers with an error', () => {
+		const page = { url: 'http://example.com/', status: 520, headers: {}, body: Buffer.alloc(0), truncated: false, bodyReadable: true, hops: [], cookies: [] };
+		assert.deepEqual(checkHttpRedirect({ ok: true, page }), { findings: [], passed: [], notes: [] });
 	});
 });

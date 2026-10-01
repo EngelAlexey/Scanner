@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Resolution } from '../src/net/resolver.ts';
-import type { HeaderScanResult } from '../src/scan.ts';
+import type { SiteScanResult } from '../src/scan.ts';
 import { handleScanRequest, type ScanRequestDeps } from '../src/scan-request.ts';
 import type { TurnstileResult } from '../src/security/turnstile.ts';
 import { DAILY_LIMIT, memoryRateLimitStore, type RateLimitStore } from '../src/store/rate-limits.ts';
@@ -19,7 +19,7 @@ function harness(overrides: Partial<ScanRequestDeps> = {}, verdict: TurnstileRes
 	const store = memoryRateLimitStore();
 	const calls = { verify: 0, resolve: 0, scan: 0 };
 	const resolution: Resolution = { ok: true, ipv4: ['93.184.215.14'], ipv6: [] };
-	const scanned: HeaderScanResult = {
+	const scanned: SiteScanResult = {
 		ok: true,
 		scan: {
 			host: 'ok.fixture-scan.dev',
@@ -30,7 +30,10 @@ function harness(overrides: Partial<ScanRequestDeps> = {}, verdict: TurnstileRes
 			headers: {},
 			sections: {
 				connection: { status: 'ok', findings: [], passed: [], notes: [] },
-				headers: { status: 'ok', findings: [], passed: [], notes: [] }
+				headers: { status: 'ok', findings: [], passed: [], notes: [] },
+				cookies: { status: 'ok', findings: [], passed: [], notes: [] },
+				content: { status: 'ok', findings: [], passed: [], notes: [] },
+				email: { status: 'ok', findings: [], passed: [], notes: [] }
 			}
 		}
 	};

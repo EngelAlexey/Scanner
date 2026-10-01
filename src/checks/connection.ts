@@ -40,7 +40,48 @@ export function parseHsts(value: string | undefined): HstsPolicy | undefined {
 	};
 }
 
-export function checkHsts(headers: HeaderMap, secure: boolean): CheckResult {
+export const PRELOADED_TLDS = new Set([
+	'android',
+	'app',
+	'bank',
+	'boo',
+	'channel',
+	'chrome',
+	'dad',
+	'day',
+	'dev',
+	'eat',
+	'esq',
+	'fly',
+	'foo',
+	'gle',
+	'gmail',
+	'google',
+	'hangout',
+	'ing',
+	'insurance',
+	'meme',
+	'mov',
+	'new',
+	'nexus',
+	'page',
+	'phd',
+	'prof',
+	'rsvp',
+	'search',
+	'youtube',
+	'zip'
+]);
+
+export function preloadedTld(host: string): string | undefined {
+	const tld = host.toLowerCase().replace(/\.$/, '').split('.').pop() ?? '';
+	return PRELOADED_TLDS.has(tld) ? tld : undefined;
+}
+
+export function checkHsts(headers: HeaderMap, secure: boolean, preloaded?: string): CheckResult {
+	if (preloaded !== undefined) {
+		return { findings: [], passed: ['hsts'], notes: [`hsts-preloaded:${preloaded}`] };
+	}
 	const value = headers['strict-transport-security']?.[0];
 	const policy = secure ? parseHsts(value) : undefined;
 	if (policy === undefined || policy.maxAge === 0) {
@@ -154,16 +195,22 @@ export function checkTls(probe: TlsProbe, now: Date): CheckResult {
 	return { findings, passed, notes: [] };
 }
 
-export function checkHttpRedirect(result: FetchResult): CheckResult {
+export function checkHttpRedirect(result: FetchResult, preloaded?: string): CheckResult {
+	if (preloaded !== undefined) {
+		return { findings: [], passed: ['http-redirect'], notes: [] };
+	}
 	if (!result.ok) {
 		if (result.error === 'connection_failed' || result.error === 'timeout') {
 			return { findings: [], passed: ['http-redirect'], notes: ['http-not-served'] };
 		}
 		return { findings: [], passed: [], notes: [] };
 	}
-	const { stop, url } = result.page;
+	const { stop, url, status } = result.page;
 	if (stop !== undefined && stop.location.startsWith('https:')) {
 		return { findings: [], passed: ['http-redirect'], notes: [] };
+	}
+	if (stop === undefined && (status < 200 || status > 299)) {
+		return { findings: [], passed: [], notes: [] };
 	}
 	return { findings: [{ code: 'http-no-redirect', evidence: capEvidence({ url: stop?.location ?? url }) }], passed: [], notes: [] };
 }

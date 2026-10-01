@@ -1,8 +1,7 @@
-import { FINDINGS } from '../src/contract/codes.ts';
+import { FINDINGS, SECTIONS, SEVERITIES } from '../src/contract/codes.ts';
+import { resolveHost } from '../src/net/resolver.ts';
 import { parseTarget } from '../src/net/target.ts';
-import { SHOWN_HEADERS, scanHeaders } from '../src/scan.ts';
-
-const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low', 'info'] as const;
+import { SHOWN_HEADERS, scanSite } from '../src/scan.ts';
 
 const args = process.argv.slice(2);
 const asJson = args.includes('--json');
@@ -20,14 +19,19 @@ if (!target.ok) {
 }
 
 const startedAt = performance.now();
-const result = await scanHeaders(target.info);
+const resolution = await resolveHost(target.info.host);
+if (!resolution.ok) {
+	console.error(`Scan failed for ${target.info.host}: ${resolution.error}`);
+	process.exit(1);
+}
+const result = await scanSite(target.info, resolution);
 const elapsedMs = Math.round(performance.now() - startedAt);
 
 if (!result.ok) {
 	if (asJson) {
-		console.log(JSON.stringify({ host: target.info.host, error: result.error, detail: result.detail, elapsedMs }, null, '\t'));
+		console.log(JSON.stringify({ host: target.info.host, error: result.error, elapsedMs }, null, '\t'));
 	} else {
-		console.error(`Scan failed for ${target.info.host}: ${result.error}${result.detail ? ` (${result.detail})` : ''}`);
+		console.error(`Scan failed for ${target.info.host}: ${result.error}`);
 	}
 	process.exit(1);
 }
@@ -39,16 +43,14 @@ if (asJson) {
 	process.exit(0);
 }
 
-const sections = Object.values(scan.sections);
-const findings = sections
-	.flatMap((section) => section.findings)
-	.toSorted((a, b) => SEVERITY_ORDER.indexOf(FINDINGS[a.code].severity) - SEVERITY_ORDER.indexOf(FINDINGS[b.code].severity));
-
 const hostLabel = scan.displayHost === scan.host ? scan.host : `${scan.displayHost} (${scan.host})`;
 console.log(`Host:      ${hostLabel}`);
-console.log(`Final URL: ${scan.finalUrl} (${scan.status}, ${elapsedMs} ms)`);
+console.log(`Final URL: ${scan.finalUrl ?? 'none'} (${scan.status ?? '-'}, ${elapsedMs} ms)`);
 for (const hop of scan.hops) {
 	console.log(`Redirect:  ${hop.status} ${hop.url} -> ${hop.location}`);
+}
+if (scan.blockedBy !== undefined) {
+	console.log(`Blocked:   ${scan.blockedBy}`);
 }
 
 console.log('\nHeaders');
@@ -57,24 +59,18 @@ for (const name of SHOWN_HEADERS) {
 	console.log(`  ${values ? '+' : '-'} ${name}${values ? `: ${values.join(' | ')}` : ''}`);
 }
 
-if (scan.blockedBy !== undefined) {
-	console.log(`\nBlocked by ${scan.blockedBy}: no section was scored`);
-}
-
-console.log('\nFindings');
-if (findings.length === 0) {
-	console.log('  none');
-}
-for (const finding of findings) {
-	const evidence = finding.evidence ? ` ${JSON.stringify(finding.evidence)}` : '';
-	console.log(`  [${FINDINGS[finding.code].severity}] ${finding.code}${evidence}`);
-}
-
-console.log('\nPassed');
-console.log(`  ${sections.flatMap((section) => section.passed).join(', ') || 'none'}`);
-
-const notes = sections.flatMap((section) => section.notes);
-if (notes.length > 0) {
-	console.log('\nNotes');
-	console.log(`  ${notes.join(', ')}`);
+for (const id of SECTIONS) {
+	const section = scan.sections[id];
+	console.log(`\n${id} [${section.status}]`);
+	const findings = section.findings.toSorted((a, b) => SEVERITIES.indexOf(FINDINGS[a.code].severity) - SEVERITIES.indexOf(FINDINGS[b.code].severity));
+	for (const finding of findings) {
+		const evidence = finding.evidence ? ` ${JSON.stringify(finding.evidence)}` : '';
+		console.log(`  [${FINDINGS[finding.code].severity}] ${finding.code}${evidence}`);
+	}
+	if (section.passed.length > 0) {
+		console.log(`  passed: ${section.passed.join(', ')}`);
+	}
+	if (section.notes.length > 0) {
+		console.log(`  notes: ${section.notes.join(', ')}`);
+	}
 }

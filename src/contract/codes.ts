@@ -76,6 +76,7 @@ export const FINDING_CODES = Object.keys(FINDINGS) as FindingCode[];
 
 export const NOTES = [
 	'cdn',
+	'hsts-preloaded',
 	'no-mx',
 	'http-not-served',
 	'ipv6-only',
