@@ -1,5 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { readConfig, TURNSTILE_TEST_SECRET } from '../src/config.ts';
 
 const SECRET = 'x'.repeat(32);
@@ -14,6 +15,15 @@ describe('readConfig', () => {
 		assert.equal(result.config.turnstile.action, null);
 		assert.equal(result.config.databaseUrl, undefined);
 		assert.ok(result.config.ipHashSecret.length >= 32);
+	});
+
+	test('vercel dev keeps one IP hash secret across processes', () => {
+		const module = new URL('../src/config.ts', import.meta.url).href;
+		const script = `const { readConfig } = await import(${JSON.stringify(module)}); const r = readConfig({ VERCEL_REGION: 'dev1' }); process.stdout.write(r.ok ? r.config.ipHashSecret : '');`;
+		const run = (): string => execFileSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8' });
+		const first = run();
+		assert.ok(first.length >= 32);
+		assert.equal(run(), first);
 	});
 
 	test('a deployment lists every missing setting', () => {

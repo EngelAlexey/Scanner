@@ -1,7 +1,7 @@
-import { randomBytes } from 'node:crypto';
 import { isLocalDev } from './security/availability.ts';
 
 export const TURNSTILE_ACTION = 'scan';
+const LOCAL_IP_HASH_SECRET = 'vercel-dev-only-secret-never-used-on-deployments';
 export const TURNSTILE_TEST_SECRET = '1x0000000000000000000000000000000AA';
 const TURNSTILE_TEST_HOSTNAMES = ['example.com'];
 const TURNSTILE_TEST_SECRET_PATTERN = /^\dx0+AA$/;
@@ -22,8 +22,6 @@ export type ScanConfig = {
 
 export type ConfigResult = { readonly ok: true; readonly config: ScanConfig } | { readonly ok: false; readonly problems: readonly string[] };
 
-let localIpHashSecret: string | undefined;
-
 function list(value: string | undefined): string[] {
 	return (value ?? '')
 		.split(',')
@@ -31,16 +29,11 @@ function list(value: string | undefined): string[] {
 		.filter((item) => item !== '');
 }
 
-function localSecret(): string {
-	localIpHashSecret ??= randomBytes(32).toString('base64url');
-	return localIpHashSecret;
-}
-
 export function readConfig(env: NodeJS.ProcessEnv = process.env): ConfigResult {
 	const local = isLocalDev(env);
 	const problems: string[] = [];
 
-	const ipHashSecret = env.IP_HASH_SECRET ?? (local ? localSecret() : '');
+	const ipHashSecret = env.IP_HASH_SECRET ?? (local ? LOCAL_IP_HASH_SECRET : '');
 	if (ipHashSecret.length < MIN_SECRET_LENGTH) {
 		problems.push('IP_HASH_SECRET');
 	}
