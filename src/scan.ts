@@ -116,7 +116,7 @@ function webSections(page: FetchedPage | undefined, blocked: boolean, securityTx
 		return { headers: section('blocked'), cookies: section('blocked'), content: section('blocked') };
 	}
 	if (page.stop !== undefined) {
-		const notes: Note[] = page.stop.reason === 'offsite' ? [`redirects-offsite:${new URL(page.stop.location).host}`] : [];
+		const notes: Note[] = page.stop.reason === 'offsite' ? [`redirects-offsite:${new URL(page.stop.location).hostname}`] : [];
 		return { headers: section('error', { findings: [], passed: [], notes }), cookies: section('error'), content: section('error') };
 	}
 	const facts = isHtml(page) ? extractPage(decodeBody(page.body, page.headers['content-type']?.[0]), page.url) : undefined;
@@ -159,7 +159,6 @@ export async function scanSite(target: HostInfo, resolution: Extract<Resolution,
 	const blockedBy = page !== undefined && page.stop === undefined ? detectBlock(page) : null;
 	const blocked = blockedBy !== null;
 	const web = webSections(page, blocked, securityTxt, now);
-	const ipv6Only: Note[] = address === undefined ? ['ipv6-only'] : [];
 	return {
 		ok: true,
 		scan: {
@@ -172,7 +171,7 @@ export async function scanSite(target: HostInfo, resolution: Extract<Resolution,
 			...(blockedBy === null ? {} : { blockedBy }),
 			sections: {
 				connection: connectionSection(target.host, tls, https, http, page, blocked, now),
-				headers: address === undefined ? section('error', { findings: [], passed: [], notes: ipv6Only }) : web.headers,
+				headers: web.headers,
 				cookies: web.cookies,
 				content: web.content,
 				email
