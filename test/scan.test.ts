@@ -152,4 +152,13 @@ describe('scanSite', () => {
 		assert.equal(result.scan.sections.connection.status, 'error');
 		assert.equal(result.scan.sections.email.status, 'ok');
 	});
+
+	test('gives exactly the same report when the same site is scanned twice', async () => {
+		const first = await scan('ok');
+		const second = await scan('ok');
+		assert.ok(first.ok && second.ok);
+		assert.deepEqual(second.scan, first.scan);
+		assert.equal(first.scan.score, 100);
+		assert.equal(first.scan.grade, 'A');
+	});
 });
