@@ -1,13 +1,7 @@
 node_modules
-
-# Deploy
 .vercel
-
-# Env
 .env
 .env.*
 !.env.example
-
-# OS
 .DS_Store
 Thumbs.db

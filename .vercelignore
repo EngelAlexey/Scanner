@@ -1,4 +1,2 @@
-# The Vercel CLI does not read .gitignore or .git/info/exclude: without this file,
-# a `vercel deploy` from this machine would upload the linked writing skill.
 .claude/
 plan_revisor_seguridad.md

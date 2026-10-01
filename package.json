@@ -8,10 +8,15 @@
 	},
 	"scripts": {
 		"test": "node --test \"test/**/*.test.ts\"",
-		"check": "tsc --noEmit"
+		"check": "tsc --noEmit",
+		"scan": "node scripts/scan.ts"
 	},
 	"devDependencies": {
 		"@types/node": "^24.19.0",
 		"typescript": "^6"
+	},
+	"dependencies": {
+		"ipaddr.js": "^2.5.0",
+		"tldts": "^7.4.16"
 	}
 }

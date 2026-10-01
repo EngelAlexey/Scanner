@@ -1,8 +1,3 @@
-// Closed list of everything a scan can report. Each finding has a fixed section
-// and severity, so the grade depends only on which codes appear in a report.
-// The portfolio keeps one MDX explanation per finding code (codes.json is
-// exported from this file), so a new code needs its explanation as well.
-
 export const SECTIONS = ['connection', 'headers', 'cookies', 'content', 'email'] as const;
 export type SectionId = (typeof SECTIONS)[number];
 
@@ -52,7 +47,6 @@ export const FINDINGS = {
 export type FindingCode = keyof typeof FINDINGS;
 export const FINDING_CODES = Object.keys(FINDINGS) as FindingCode[];
 
-// Checks that passed, shown under "Qué hace bien su sitio", grouped by section.
 export const PASSED_CHECKS = {
 	'https': 'connection',
 	'http-redirect': 'connection',
@@ -80,8 +74,6 @@ export const PASSED_CHECKS = {
 
 export type PassedCheck = keyof typeof PASSED_CHECKS;
 
-// Observations never change the score. `cdn` is stored with its provider,
-// as in `cdn:cloudflare`.
 export const NOTES = [
 	'cdn',
 	'no-mx',

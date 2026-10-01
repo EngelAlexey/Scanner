@@ -1,4 +1,3 @@
-// Deployment check: answers without touching the database or the network.
 export function GET(): Response {
 	const version = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'dev';
 	return Response.json(
