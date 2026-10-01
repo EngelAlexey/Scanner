@@ -10,13 +10,16 @@
 		"test": "node --test \"test/**/*.test.ts\"",
 		"check": "tsc --noEmit",
 		"scan": "node scripts/scan.ts",
-		"export-codes": "node scripts/export-codes.ts"
+		"export-codes": "node scripts/export-codes.ts",
+		"migrate": "node --env-file-if-exists=.env.local scripts/migrate.ts"
 	},
 	"devDependencies": {
 		"@types/node": "^24.19.0",
 		"typescript": "^6"
 	},
 	"dependencies": {
+		"@neondatabase/serverless": "1.1.0",
+		"@vercel/functions": "3.9.9",
 		"ipaddr.js": "^2.5.0",
 		"tldts": "^7.4.16"
 	}
