@@ -1,6 +1,7 @@
 import { readConfig, type ScanConfig } from './config.ts';
 import { resolveHost, type Resolution } from './net/resolver.ts';
 import { parseTarget, type HostInfo } from './net/target.ts';
+import { SCORING_VERSION } from './grade.ts';
 import { scanSite, type SiteScanResult } from './scan.ts';
 import { scanningEnabled } from './security/availability.ts';
 import { readClientIp } from './security/client-ip.ts';
@@ -8,6 +9,7 @@ import { allowedOrigins, corsHeaders, isAllowedOrigin } from './security/cors.ts
 import { json } from './security/response-headers.ts';
 import { verifyTurnstile, type TurnstileResult } from './security/turnstile.ts';
 import { consumeQuota, memoryRateLimitStore, sqlRateLimitStore, type QuotaResult, type RateLimitStore } from './store/rate-limits.ts';
+import { buildReport, memoryReportStore, newReportId, reportVersions, sqlReportStore, type Report, type ReportStore } from './store/reports.ts';
 import { sqlClient } from './store/sql.ts';
 
 const MAX_BODY_BYTES = 4096;
@@ -20,6 +22,8 @@ export type ScanRequestDeps = {
 	readonly verify: (token: string, remoteIp: string, config: ScanConfig) => Promise<TurnstileResult>;
 	readonly resolve: (host: string) => Promise<Resolution>;
 	readonly scan: (target: HostInfo, resolution: Extract<Resolution, { ok: true }>) => Promise<SiteScanResult>;
+	readonly reports: (config: ScanConfig) => ReportStore;
+	readonly newId: () => string;
 };
 
 type ScanBody = {
@@ -28,6 +32,7 @@ type ScanBody = {
 };
 
 let localStore: RateLimitStore | undefined;
+let localReports: ReportStore | undefined;
 
 export const defaultDeps: ScanRequestDeps = {
 	env: process.env,
@@ -36,7 +41,10 @@ export const defaultDeps: ScanRequestDeps = {
 		config.databaseUrl === undefined ? (localStore ??= memoryRateLimitStore()) : sqlRateLimitStore(sqlClient(config.databaseUrl)),
 	verify: (token, remoteIp, config) => verifyTurnstile(token, remoteIp, config.turnstile),
 	resolve: (host) => resolveHost(host),
-	scan: (target, resolution) => scanSite(target, resolution)
+	scan: (target, resolution) => scanSite(target, resolution),
+	reports: (config) =>
+		config.databaseUrl === undefined ? (localReports ??= memoryReportStore()) : sqlReportStore(sqlClient(config.databaseUrl)),
+	newId: newReportId
 };
 
 async function readBody(request: Request): Promise<ScanBody | undefined> {
@@ -54,6 +62,14 @@ async function readBody(request: Request): Promise<ScanBody | undefined> {
 		}
 		const token = 'token' in body && typeof body.token === 'string' ? body.token : '';
 		return { url: body.url, token };
+	} catch {
+		return undefined;
+	}
+}
+
+async function reusable(store: () => ReportStore, host: string, now: Date): Promise<Report | undefined> {
+	try {
+		return await store().findReusable(host, SCORING_VERSION, now);
 	} catch {
 		return undefined;
 	}
@@ -108,6 +124,11 @@ export async function handleScanRequest(request: Request, deps: ScanRequestDeps 
 		return reply({ error: resolution.error }, resolution.error === 'dns_error' ? 502 : 422);
 	}
 
+	const previous = await reusable(() => deps.reports(config), target.info.host, now);
+	if (previous !== undefined) {
+		return reply({ ...previous, reused: true }, 200);
+	}
+
 	const quota = await spendQuota(() => deps.store(config), client.hash, now);
 	if (quota === undefined) {
 		return reply({ error: 'unavailable' }, 503);
@@ -122,5 +143,11 @@ export async function handleScanRequest(request: Request, deps: ScanRequestDeps 
 	if (!result.ok) {
 		return reply({ error: result.error }, UNREACHABLE_ERRORS.has(result.error) ? 502 : 422);
 	}
-	return reply(result.scan, 200);
+	const report = buildReport(result.scan, deps.newId(), now, reportVersions(deps.env));
+	try {
+		await deps.reports(config).insert(report);
+		return reply({ ...report, reused: false }, 200);
+	} catch {
+		return reply({ ...report, id: null, reused: false }, 200);
+	}
 }
