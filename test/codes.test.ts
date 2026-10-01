@@ -23,6 +23,20 @@ describe('finding codes', () => {
 		}
 	});
 
+	test('every code belongs to a check of its own section', () => {
+		for (const code of FINDING_CODES) {
+			const { section, check } = FINDINGS[code];
+			assert.equal(PASSED_CHECKS[check], section, `${code} points to ${check}, which is not in ${section}`);
+		}
+	});
+
+	test('every check has at least one finding that can fail it', () => {
+		const failing = new Set(FINDING_CODES.map((code) => FINDINGS[code].check));
+		for (const check of Object.keys(PASSED_CHECKS)) {
+			assert.ok(failing.has(check as keyof typeof PASSED_CHECKS), `${check} has no finding`);
+		}
+	});
+
 	test('every section has at least one finding', () => {
 		for (const section of SECTIONS) {
 			assert.ok(

@@ -9,7 +9,8 @@
 	"scripts": {
 		"test": "node --test \"test/**/*.test.ts\"",
 		"check": "tsc --noEmit",
-		"scan": "node scripts/scan.ts"
+		"scan": "node scripts/scan.ts",
+		"export-codes": "node scripts/export-codes.ts"
 	},
 	"devDependencies": {
 		"@types/node": "^24.19.0",
