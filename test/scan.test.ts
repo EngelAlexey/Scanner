@@ -153,6 +153,26 @@ describe('scanSite', () => {
 		assert.equal(result.scan.sections.email.status, 'ok');
 	});
 
+	test('a DNS server that never answers only leaves the email section unreviewed', async () => {
+		const silent = { ...fakeDns(email), resolveTxt: () => new Promise<never>(() => undefined), resolveMx: () => new Promise<never>(() => undefined), resolveCaa: () => new Promise<never>(() => undefined) };
+		const startedAt = performance.now();
+		const result = await scanSite(target('ok'), { ok: true, ipv4: ['127.0.0.1'], ipv6: [] }, {
+			policy: testAddressPolicy([httpsPort, httpPort]),
+			dns: silent,
+			ports: { https: httpsPort, http: httpPort },
+			tlsCa: [TEST_CA],
+			now: NOW,
+			budgetMs: 1500
+		});
+		assert.ok(performance.now() - startedAt < 3000);
+		assert.ok(result.ok);
+		assert.equal(result.scan.sections.email.status, 'error');
+		for (const id of ['connection', 'headers', 'cookies', 'content'] as const) {
+			assert.equal(result.scan.sections[id].status, 'ok', id);
+		}
+		assert.equal(result.scan.partial, true);
+	});
+
 	test('gives exactly the same report when the same site is scanned twice', async () => {
 		const first = await scan('ok');
 		const second = await scan('ok');
