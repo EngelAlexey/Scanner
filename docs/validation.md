@@ -1,10 +1,10 @@
 # Validación
 
-Cada fila compara el resultado del revisor con el de una herramienta de referencia. Una diferencia se anota con su causa.
+Cada fila compara el resultado del escáner con el de una herramienta de referencia. Una diferencia se anota con su causa.
 
 ## Fase 1: cabeceras de seguridad (2026-09-30)
 
-El revisor se ejecutó con `pnpm scan <dominio>` en Node 24.19.0. La referencia es la API v2 de Mozilla Observatory (`algorithm_version` 6), porque securityheaders.com responde 403 a las peticiones automáticas.
+El escáner se ejecutó con `pnpm scan <dominio>` en Node 24.19.0. La referencia es la API v2 de Mozilla Observatory (`algorithm_version` 6), porque securityheaders.com responde 403 a las peticiones automáticas.
 
 | Sitio | Comprobación | Revisor | Observatory |
 |---|---|---|---|
@@ -28,9 +28,9 @@ Coinciden las 15 filas. Observatory dio B (70 puntos) a alexherrera.dev, A+ (115
 
 Diferencias esperadas:
 
-- **Permissions-Policy.** Observatory no la revisa. El revisor la marca en los tres sitios, porque ninguno restringe `camera`, `microphone` y `geolocation`.
-- **Versión del servidor.** Observatory no la revisa. El revisor marca `Server: ATS/9.2.15` en wikipedia.org.
-- **SRI.** Observatory falla alexherrera.dev y github.com por cargar scripts externos sin `integrity`. El revisor excluye los cargadores que cambian por diseño, como Google Tag Manager, así que esa comprobación no coincidirá en esos casos.
+- **Permissions-Policy.** Observatory no la revisa. El escáner la marca en los tres sitios, porque ninguno restringe `camera`, `microphone` y `geolocation`.
+- **Versión del servidor.** Observatory no la revisa. El escáner marca `Server: ATS/9.2.15` en wikipedia.org.
+- **SRI.** Observatory falla alexherrera.dev y github.com por cargar scripts externos sin `integrity`. El escáner excluye los cargadores que cambian por diseño, como Google Tag Manager, así que esa comprobación no coincidirá en esos casos.
 
 ## Fase 2: blindaje (2026-09-30)
 
@@ -67,7 +67,7 @@ La detección de `http2-only` no está hecha: un servidor que solo habla HTTP/2 
 
 ## Fase 3: revisiones completas (2026-10-01)
 
-El revisor se ejecutó con `pnpm scan <dominio>` en Node 24.19.0, desde Costa Rica. Un análisis tardó entre 3 y 5 segundos en sitios grandes y hasta 15 en badssl.com.
+El escáner se ejecutó con `pnpm scan <dominio>` en Node 24.19.0, desde Costa Rica. Un análisis tardó entre 3 y 5 segundos en sitios grandes y hasta 15 en badssl.com.
 
 ### Certificados y TLS con badssl.com
 
@@ -84,7 +84,7 @@ El revisor se ejecutó con `pnpm scan <dominio>` en Node 24.19.0, desde Costa Ri
 
 Coinciden las 8 filas. Todos los servidores de badssl.com aceptan TLS 1.0 y 1.1 y no negocian TLS 1.3, así que todos dan además `tls-legacy` y `tls13-missing`.
 
-badssl.com corta conexiones cuando una misma IP abre varias a la vez. En la primera versión, el revisor abría hasta cinco y daba `https-unavailable` en sitios que sí respondían. Ahora la sonda TLS espera a la respuesta HTTPS, prueba TLS 1.0 y 1.1 una tras otra y reintenta una vez tras un corte. Si la sonda falla pero la página llegó por HTTPS, la conexión cuenta como disponible y el certificado queda sin revisar.
+badssl.com corta conexiones cuando una misma IP abre varias a la vez. En la primera versión, el escáner abría hasta cinco y daba `https-unavailable` en sitios que sí respondían. Ahora la sonda TLS espera a la respuesta HTTPS, prueba TLS 1.0 y 1.1 una tras otra y reintenta una vez tras un corte. Si la sonda falla pero la página llegó por HTTPS, la conexión cuenta como disponible y el certificado queda sin revisar.
 
 ### Comparación con Mozilla Observatory
 
@@ -103,11 +103,11 @@ badssl.com corta conexiones cuando una misma IP abre varias a la vez. En la prim
 
 Diferencias y su causa:
 
-- **El User-Agent cambia la respuesta de Google.** Con el User-Agent anterior del revisor, o con el de `curl`, `www.google.com` no redirigía a HTTPS ni enviaba HSTS. Con el de un navegador, redirige con 302 y envía `max-age=31536000`, como ve Observatory. El 2026-10-01 el autor decidió usar un User-Agent de navegador que termina en `AlexHerreraScanner/1.0` y la URL de la página «acerca». Con él, `www.google.com` aprueba la redirección y HSTS.
-- **Cookies sin SameSite.** El revisor exige SameSite en todas las cookies; Observatory solo lo premia.
-- **Cookies sin HttpOnly que no son de sesión.** El revisor las marca como informativas, sin restar puntos.
+- **El User-Agent cambia la respuesta de Google.** Con el User-Agent anterior del escáner, o con el de `curl`, `www.google.com` no redirigía a HTTPS ni enviaba HSTS. Con el de un navegador, redirige con 302 y envía `max-age=31536000`, como ve Observatory. El 2026-10-01 el autor decidió usar un User-Agent de navegador que termina en `AlexHerreraScanner/1.0` y la URL de la página «acerca». Con él, `www.google.com` aprueba la redirección y HSTS.
+- **Cookies sin SameSite.** El escáner exige SameSite en todas las cookies; Observatory solo lo premia.
+- **Cookies sin HttpOnly que no son de sesión.** El escáner las marca como informativas, sin restar puntos.
 - **Referrer-Policy ausente.** Observatory no la penaliza, porque los navegadores aplican `strict-origin-when-cross-origin` por defecto. La calibración de la fase 4 decide si baja a informativa.
-- **SRI.** La diferencia ya descrita en la fase 1: el revisor solo exige `integrity` a las CDN con versión fija.
+- **SRI.** La diferencia ya descrita en la fase 1: el escáner solo exige `integrity` a las CDN con versión fija.
 
 ### Precarga HSTS
 
